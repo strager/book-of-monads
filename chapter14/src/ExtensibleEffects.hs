@@ -90,13 +90,11 @@ runReaderS = loop
 data Error e x where
   Error :: e -> Error e a
 
-handleError :: Eff (Error e : rs) a -> (e -> Eff rs a) -> Eff rs a
-handleError m c = loop m
+handleError :: forall a e rs. Eff (Error e : rs) a -> (e -> Eff rs a) -> Eff rs a
+handleError m c = runEffects runEffect Impure m
   where
-    loop (Pure x) = return x
-    loop (Impure a k) = case proj a of
-                          Right (Error e) -> c e
-                          Left op -> Impure op (loop . k)
+    runEffect :: forall b. Error e b -> (b -> Eff rs a) -> Eff rs a
+    runEffect (Error e) _continue = c e
 
 -- catchError :: Member (Error e) rs => Eff rs a -> (e -> Eff rs a) -> Eff rs a
 
