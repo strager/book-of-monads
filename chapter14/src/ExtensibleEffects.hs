@@ -58,13 +58,11 @@ proj :: Union (f : rs) x -> Either (Union rs x) (f x)
 proj (This t) = Right t
 proj (That t) = Left t
 
-runReader :: r -> Eff (Reader r : rs) a -> Eff rs a
-runReader r = loop
+runReader :: forall a r rs. r -> Eff (Reader r : rs) a -> Eff rs a
+runReader r = runEffects runEffect Impure
   where
-    loop (Pure x) = return x
-    loop (Impure a k) = case proj a of
-                          Right Ask -> loop (k r)
-                          Left op -> Impure op (loop . k)
+    runEffect :: forall b. Reader r b -> (b -> Eff rs a) -> Eff rs a
+    runEffect Ask continue = continue r
 
 run :: Eff '[] a -> a
 run (Pure x) = x
