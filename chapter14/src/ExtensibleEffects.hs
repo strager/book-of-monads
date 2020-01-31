@@ -76,14 +76,14 @@ data State s x where
   Get :: State s s
   Put :: s -> State s ()
 
-runReaderS :: Eff (Reader r : rs) a -> Eff (State r : rs) a
-runReaderS = loop
+runReaderS :: forall a r rs. Eff (Reader r : rs) a -> Eff (State r : rs) a
+runReaderS = runEffects runEffect runOp
   where
-    loop :: Eff (Reader r : rs) a -> Eff (State r : rs) a
-    loop (Pure x) = return x
-    loop (Impure a k) = case proj a of
-                          Right Ask -> Impure (inj Get) (loop . k)
-                          Left op -> Impure (That op) (loop . k)
+    runEffect :: forall b. Reader r b -> (b -> Eff (State r : rs) a) -> Eff (State r : rs) a
+    runEffect Ask continue = Impure (inj Get) continue
+
+    runOp :: forall c. Union rs c -> (c -> Eff (State r : rs) a) -> Eff (State r : rs) a
+    runOp op continue = Impure (That op) continue
 
 data Error e x where
   Error :: e -> Error e a
@@ -110,10 +110,10 @@ runFS = runEffects runEffect Impure
       WriteFile fp contents -> injectIO (Control.Exception.try (System.IO.writeFile fp contents)) `Impure` continue
 
 runEffects
-  :: (forall b. effect b -> (b -> Eff rs a) -> Eff rs a) -- ^ runEffect
-  -> (forall c. Union rs c -> (c -> Eff rs a) -> Eff rs a) -- ^ runOp
+  :: (forall b. effect b -> (b -> Eff rs' a) -> Eff rs' a) -- ^ runEffect
+  -> (forall c. Union rs c -> (c -> Eff rs' a) -> Eff rs' a) -- ^ runOp
   -> Eff (effect : rs) a
-  -> Eff rs a
+  -> Eff rs' a
 runEffects runEffect runOp = loop
   where
     loop (Pure x) = return x
