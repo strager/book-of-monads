@@ -5,6 +5,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module ExtensibleEffects where
 
@@ -103,15 +105,26 @@ handleError m c = loop m
 
 newtype Lift m a = Lift (m a)
 
-runFS :: Member (Lift IO) rs => Eff (FS : rs) a -> Eff rs a
-runFS = loop
+runFS :: forall a rs. Member (Lift IO) rs => Eff (FS : rs) a -> Eff rs a
+runFS = runEffects runEffect Impure
   where
-    loop :: Member (Lift IO) rs => Eff (FS : rs) a -> Eff rs a
+    runEffect :: forall b. FS b -> (b -> Eff rs a) -> Eff rs a
+    runEffect effect continue = case effect of
+      ReadFile fp -> injectIO (Control.Exception.try (System.IO.readFile fp)) `Impure` continue
+      WriteFile fp contents -> injectIO (Control.Exception.try (System.IO.writeFile fp contents)) `Impure` continue
+
+runEffects
+  :: (forall b. effect b -> (b -> Eff rs a) -> Eff rs a) -- ^ runEffect
+  -> (forall c. Union rs c -> (c -> Eff rs a) -> Eff rs a) -- ^ runOp
+  -> Eff (effect : rs) a
+  -> Eff rs a
+runEffects runEffect runOp = loop
+  where
     loop (Pure x) = return x
     loop (Impure a k) = case proj a of
-                          Right (ReadFile fp) -> injectIO (Control.Exception.try (System.IO.readFile fp)) `Impure` loop . k
-                          Right (WriteFile fp contents) -> injectIO (Control.Exception.try (System.IO.writeFile fp contents)) `Impure` loop . k
-                          Left op -> Impure op (loop . k)
+      Right effect -> runEffect effect continue
+      Left op -> runOp op continue
+      where continue = loop . k
 
 injectIO :: (Member (Lift IO) rs) => IO a -> Union rs a
 injectIO m = inj (Lift m)
