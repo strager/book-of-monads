@@ -8,7 +8,8 @@
 
 module ExtensibleEffects where
 
-import System.IO (readFile, writeFile)
+import qualified Control.Exception
+import qualified System.IO
 
 import Freer
 
@@ -108,9 +109,12 @@ runFS = loop
     loop :: Member (Lift IO) rs => Eff (FS : rs) a -> Eff rs a
     loop (Pure x) = return x
     loop (Impure a k) = case proj a of
-                          Right (ReadFile fp) -> loop . k $ _a
-                          Right (WriteFile fp contents) -> _b
+                          Right (ReadFile fp) -> injectIO (Control.Exception.try (System.IO.readFile fp)) `Impure` loop . k
+                          Right (WriteFile fp contents) -> injectIO (Control.Exception.try (System.IO.writeFile fp contents)) `Impure` loop . k
                           Left op -> Impure op (loop . k)
+
+injectIO :: (Member (Lift IO) rs) => IO a -> Union rs a
+injectIO m = inj (Lift m)
 
 runM :: Monad m => Eff (Lift m : '[]) a -> m a
 runM = loop

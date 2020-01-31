@@ -8,6 +8,8 @@ data Freer instr a where
   Pure ::a -> Freer instr a
   Impure ::instr a -> (a -> Freer instr b) -> Freer instr b
 
+infixl 1 `Impure`
+
 instance Functor (Freer instr) where
   fmap f (Pure x    ) = Pure $ f x
   fmap f (Impure x k) = Impure x (fmap f . k)
